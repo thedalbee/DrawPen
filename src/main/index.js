@@ -27,9 +27,12 @@ const KEY_MAKE_SCREENSHOT      = 'CmdOrCtrl+Shift+P'
 const KEY_Q                    = 'CmdOrCtrl+Q'
 const KEY_NULL                 = '[NULL]'
 
-const EXTENDED_TOOLBAR_WINDOW_MARGIN = 10
-const EXTENDED_TOOLBAR_WINDOW_WIDTH  = EXTENDED_TOOLBAR_WINDOW_MARGIN+80+17+5
-const EXTENDED_TOOLBAR_WINDOW_HEIGHT = EXTENDED_TOOLBAR_WINDOW_MARGIN+70+5
+const EXTENDED_TOOLBAR_WINDOW_MARGIN = 12
+const EXTENDED_TOOLBAR_MODE_WIDTH = 64
+const EXTENDED_TOOLBAR_SLIDER_WIDTH = 18
+const EXTENDED_TOOLBAR_HEIGHT = 64
+const EXTENDED_TOOLBAR_WINDOW_WIDTH = (EXTENDED_TOOLBAR_WINDOW_MARGIN * 2) + EXTENDED_TOOLBAR_MODE_WIDTH + EXTENDED_TOOLBAR_SLIDER_WIDTH
+const EXTENDED_TOOLBAR_WINDOW_HEIGHT = (EXTENDED_TOOLBAR_WINDOW_MARGIN * 2) + EXTENDED_TOOLBAR_HEIGHT
 
 let lastShortcutTime = 0;
 const throttleDelay = 250;
@@ -318,7 +321,10 @@ function createMainWindow() {
     store.set('active_monitor_id', currentDisplay.id)
   }
 
-  let { x: displayX, y: displayY, width: displayWidth, height: displayHeight } = currentDisplay.workArea
+  // Use full display bounds (not workArea) so the overlay covers the screen even
+  // when Stage Manager / Dock / menu bar reduce workArea, letting the toolbar drag
+  // anywhere on screen.
+  let { x: displayX, y: displayY, width: displayWidth, height: displayHeight } = currentDisplay.bounds
 
   let isResizable = false
   let hasDevTools = false
@@ -347,6 +353,9 @@ function createMainWindow() {
     skipTaskbar: true,
     opacity: 0.9999999, // Fix transparency rendering artifacts
     autoHideMenuBar: true,
+    // First click on inactive window is delivered to the app (not swallowed by macOS focus).
+    // Lets the toolbar drag immediately while another app is focused.
+    acceptFirstMouse: true,
     webPreferences: {
       devTools: hasDevTools,
       nodeIntegration: false,
@@ -404,6 +413,7 @@ function createExtendedToolbarWindow() {
     skipTaskbar: true,
     opacity: 0.9999999, // Fix transparency rendering artifacts
     autoHideMenuBar: true,
+    acceptFirstMouse: true,
     webPreferences: {
       devTools: hasDevTools,
       nodeIntegration: false,
@@ -661,6 +671,18 @@ function updateApp() {
 
 ipcMain.handle('get_app_version', () => {
   return app.getVersion();
+});
+
+ipcMain.on('extended_toolbar_drag_by', (_event, dx, dy) => {
+  if (!extendedToolbarWindow) return;
+  const [x, y] = extendedToolbarWindow.getPosition();
+  extendedToolbarWindow.setPosition(Math.round(x + dx), Math.round(y + dy));
+});
+
+ipcMain.handle('enter_draw_mode_from_extended_toolbar', (_event, screenX, screenY) => {
+  withThrottle(() => {
+    enableDrawModeFromExtendedToolbar(screenX, screenY)
+  });
 });
 
 ipcMain.handle('get_settings', () => {
@@ -987,6 +1009,15 @@ function updateToolbarPositionInRenderer() {
   })
 }
 
+function sendToolbarPositionToRenderer(position) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  mainWindow.webContents.send('update_toolbar_position', {
+    tool_bar_x: position.x,
+    tool_bar_y: position.y,
+  })
+}
+
 function registerGlobalShortcuts() {
   rawLog('REGISTER global shortcuts...')
 
@@ -1025,7 +1056,52 @@ function toggleDrawOrPointerMode() {
 function enableDrawMode() {
   rawLog('Enable drawing mode...')
 
+  if (extendedToolbarPositionStoreTimeout) {
+    clearTimeout(extendedToolbarPositionStoreTimeout)
+    extendedToolbarPositionStoreTimeout = null
+  }
+
+  const toolbarPosition = storeToolbarPositionFromExtendedWindow()
   showMainWindow()
+  if (toolbarPosition) {
+    sendToolbarPositionToRenderer(toolbarPosition)
+    setTimeout(() => sendToolbarPositionToRenderer(toolbarPosition), 50)
+  }
+  hideWindow(extendedToolbarWindow)
+
+  drawingMode = true
+  updateContextMenu()
+}
+
+function enableDrawModeFromExtendedToolbar(screenX, screenY) {
+  rawLog(`Enable drawing mode from extended toolbar: screenX=${screenX}, screenY=${screenY}`)
+
+  if (extendedToolbarPositionStoreTimeout) {
+    clearTimeout(extendedToolbarPositionStoreTimeout)
+    extendedToolbarPositionStoreTimeout = null
+  }
+
+  const display = getLockedMonitor() || screen.getDisplayMatching({
+    x: Math.round(screenX),
+    y: Math.round(screenY),
+    width: 1,
+    height: 1,
+  })
+  const { x: displayX, y: displayY } = display.bounds
+  const toolbarPosition = {
+    x: Math.round(screenX - displayX),
+    y: Math.round(screenY - displayY),
+  }
+
+  store.set({
+    tool_bar_x: toolbarPosition.x,
+    tool_bar_y: toolbarPosition.y,
+  })
+
+  updateMainWindowPosition(display)
+  showWindow(mainWindow)
+  sendToolbarPositionToRenderer(toolbarPosition)
+  setTimeout(() => sendToolbarPositionToRenderer(toolbarPosition), 50)
   hideWindow(extendedToolbarWindow)
 
   drawingMode = true
@@ -1262,22 +1338,26 @@ function showWindow(targetWindow) {
 
 function storeToolbarPositionFromExtendedWindow() {
   const currentDisplay = getLockedMonitor() || getUnderToolbarMonitor()
-  if (!currentDisplay) return;
+  if (!currentDisplay) return null;
 
-  const { x: displayX, y: displayY } = currentDisplay.workArea
+  const { x: displayX, y: displayY } = currentDisplay.bounds
   const { x: extToolBarX, y: extToolBarY } = extendedToolbarWindow.getBounds()
 
-  const toolBarX = extToolBarX - displayX + EXTENDED_TOOLBAR_WINDOW_MARGIN
-  const toolBarY = extToolBarY - displayY + EXTENDED_TOOLBAR_WINDOW_MARGIN
+  const toolbarPosition = {
+    x: extToolBarX - displayX + EXTENDED_TOOLBAR_WINDOW_MARGIN,
+    y: extToolBarY - displayY + EXTENDED_TOOLBAR_WINDOW_MARGIN,
+  }
 
-  rawLog(`Update Toolbar: display: ${currentDisplay.id}, toolBarX: ${toolBarX}, toolBarY: ${toolBarY}`)
+  rawLog(`Update Toolbar: display: ${currentDisplay.id}, toolBarX: ${toolbarPosition.x}, toolBarY: ${toolbarPosition.y}`)
 
   store.set({
-    tool_bar_x: toolBarX,
-    tool_bar_y: toolBarY,
+    tool_bar_x: toolbarPosition.x,
+    tool_bar_y: toolbarPosition.y,
   });
 
   updateMainWindowPosition(currentDisplay)
+
+  return toolbarPosition
 }
 
 function scheduleStoreToolbarPositionFromExtendedWindow() {
@@ -1306,7 +1386,7 @@ function updateMainWindowPosition(display) {
     return
   }
 
-  mainWindow.setBounds(display.workArea)
+  mainWindow.setBounds(display.bounds)
 
   if (isDevelopment) {
     mainWindow.setBounds({
@@ -1335,7 +1415,7 @@ function showExtendedToolbarWindow() {
 }
 
 function updateExtendedToolbarWindowPosition(display) {
-  const { x: displayX, y: displayY } = display.workArea
+  const { x: displayX, y: displayY } = display.bounds
 
   extendedToolbarWindow.setBounds({
     x: displayX + store.get('tool_bar_x') - EXTENDED_TOOLBAR_WINDOW_MARGIN,

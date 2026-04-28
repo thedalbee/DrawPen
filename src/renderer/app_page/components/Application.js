@@ -229,6 +229,14 @@ const Application = (settings) => {
             setUndoStackFigures(prevUndoStack => [...prevUndoStack, { type: 'add', figures: [newFigure] }]);
             setRedoStackFigures([]);
           }
+        } else {
+          // Plain v -> brush (cycles through pen/fadepen)
+          let nextBrush = toolbarLastActiveBrush;
+          if (activeTool === toolbarLastActiveBrush) {
+            const i = brushList.indexOf(activeTool);
+            nextBrush = brushList[(i + direction + brushList.length) % brushList.length];
+          }
+          handleChangeTool(nextBrush);
         }
 
         break;
@@ -243,6 +251,14 @@ const Application = (settings) => {
               points: activeFigure.points.map(p => [...p]) // Avoid mutation
             });
           }
+        } else {
+          // Plain c -> shapes (cycles through shapeList)
+          let nextShape = toolbarLastActiveFigure;
+          if (activeTool === toolbarLastActiveFigure) {
+            const i = shapeList.indexOf(activeTool);
+            nextShape = shapeList[(i + direction + shapeList.length) % shapeList.length];
+          }
+          handleChangeTool(nextShape);
         }
 
         break;
@@ -293,6 +309,9 @@ const Application = (settings) => {
             setUndoStackFigures(prevUndoStack => prevUndoStack.slice(0, -1));
             setRedoStackFigures(prevRedoStack => [...prevRedoStack, lastAction]);
           }
+        } else {
+          // Plain z -> eraser
+          handleChangeTool('eraser');
         }
         break;
       }
@@ -313,7 +332,7 @@ const Application = (settings) => {
         break;
       }
       case 'r': {
-        handleChangeTool('rectangle');
+        handleChangeTool('laser');
         break;
       }
       case 'o': {

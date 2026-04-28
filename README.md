@@ -1,7 +1,31 @@
 <p align="center">
   <img src="https://github.com/DmytroVasin/DrawPen/blob/main/assets/static/icon.png?raw=true" height="200">
-  <h3 align="center">Draw Pen</h3>
-  <p align="center">An open-source screen annotation tool</p>
+  <h3 align="center">DrawPen · Frosted (personal fork)</h3>
+  <p align="center">UI-only fork of <a href="https://github.com/DmytroVasin/DrawPen">DmytroVasin/DrawPen</a></p>
+</p>
+
+> ## ⚠️ This is a personal fork
+>
+> All credit for DrawPen goes to **[@DmytroVasin](https://github.com/DmytroVasin)** and the upstream contributors. This fork only restyles the toolbar and tweaks a few interactions (drag-anywhere, custom letter shortcuts, full-display bounds so the toolbar can be dragged into Stage Manager / Dock margins). The MIT license carries through unchanged.
+>
+> **For the real, maintained app, use upstream:** https://github.com/DmytroVasin/DrawPen
+>
+> Issues and feature requests should be filed upstream, not here.
+>
+> ### What's different in this fork
+>
+> | Area | Change |
+> |---|---|
+> | Toolbar look | Frosted HUD — dark translucent panel, white SF-style icons, larger radius, native `vibrancy: 'hud'` on the extended toolbar window |
+> | Drag | JS pointer-based drag everywhere on the toolbar (5px threshold separates click from drag); main and extended windows accept first-mouse |
+> | Display bounds | `display.bounds` instead of `display.workArea` so the overlay covers the whole screen (Stage Manager / Dock no longer clip drag area) |
+> | Letter shortcuts | `v` brush, `c` shapes, `t` text, `h` highlighter, `r` laser, `z` eraser (collide-safe with cmd+v/c/z clipboard / undo) |
+> | Visual guides | Removed light-green zone border |
+
+---
+
+<p align="center">
+  <h3 align="center">Original README below</h3>
 </p>
 
 <p align="center">

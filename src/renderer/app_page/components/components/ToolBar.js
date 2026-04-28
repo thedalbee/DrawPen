@@ -5,6 +5,11 @@ import { brushList, shapeList, colorList, widthList } from "../constants.js";
 const STICKY_DISTANCE = 15;
 const ZONE_BORDER = 10; // Equals to "--border-size"*2
 
+const TOOL_GROUPS = {
+  brush: ["pen", "fadepen"],
+  shape: ["arrow", "flat_arrow", "rectangle", "oval", "line"],
+};
+
 const ToolBar = ({
   position,
   setPosition,
@@ -233,6 +238,26 @@ const ToolBar = ({
     return renderShortcutTitle(width.title, String(index + 1));
   };
 
+  const renderToolButton = ({ tool, active, title, onClick, className, itemKey }) => (
+    <li
+      key={itemKey || tool}
+      className={[active ? "active" : undefined, className].filter(Boolean).join(" ") || undefined}
+      onClick={onClick}
+    >
+      <button tabIndex={-1} title={title || renderToolTitle(tool)}>
+        {allIcons[tool]}
+      </button>
+    </li>
+  );
+
+  const renderToolGroup = (tools) => tools.map((tool, index) => renderToolButton({
+    tool,
+    itemKey: tool,
+    active: activeTool === tool,
+    title: renderToolTitle(tool, String(index + 1)),
+    onClick: () => pickTool(tool),
+  }));
+
   const pickFigureOrSwitchView = () => {
     if (shapeList.includes(activeTool)) {
       setToolbarSlide("tool-slide");
@@ -254,6 +279,25 @@ const ToolBar = ({
   };
 
   const isColorControlDisabled = ["laser", "eraser"].includes(activeTool);
+  const mainTools = [
+    {
+      tool: lastActiveBrush,
+      active: brushList.includes(activeTool),
+      className: "more_figures",
+      onClick: pickBrushOrSwitchView,
+    },
+    {
+      tool: lastActiveFigure,
+      active: shapeList.includes(activeTool),
+      className: "more_figures",
+      onClick: pickFigureOrSwitchView,
+    },
+    { tool: "text", active: activeTool === "text", onClick: () => handleChangeTool("text") },
+    { tool: "highlighter", active: activeTool === "highlighter", onClick: () => handleChangeTool("highlighter") },
+    { tool: "laser", active: activeTool === "laser", onClick: () => handleChangeTool("laser") },
+    { tool: "eraser", active: activeTool === "eraser", onClick: () => handleChangeTool("eraser") },
+  ];
+
   return (
     <aside
       id="toolbar"
@@ -261,71 +305,32 @@ const ToolBar = ({
       className={`${toolbarSlide}${isCollapsed ? " toolbar--collapsed" : ""}`}
       style={{ left: position.x, top: position.y }}
     >
-      <div className="toolbar__mode-switcher">
-        <div className="toolbar__draglines" onPointerDown={onPointerDown}>
-          <div className="draglines">
-            <div />
-            <div />
-            <div />
-            <div />
-            <div />
-            <div />
-          </div>
-        </div>
-
+      <div className="toolbar__mode-switcher" onPointerDown={onPointerDown}>
         <div className="toolbar__main-button">
-          <button tabIndex={-1} title="Pointer Mode" onClick={handleEnablePointerMode}>
+          <button
+            tabIndex={-1}
+            title="Pointer Mode"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={handleEnablePointerMode}
+          >
             <Icons.DrawModeEnabled />
           </button>
         </div>
-
-        <div className="toolbar__draglines" onPointerDown={onPointerDown}>
-          <div className="draglines">
-            <div />
-            <div />
-            <div />
-            <div />
-            <div />
-            <div />
-          </div>
-        </div>
       </div>
 
-      <div className="toolbar__container">
+      <div className="toolbar__container" onPointerDown={onPointerDown}>
         <div className="toolbar__panels-track">
           <div className="toolbar__panel toolbar__panel--full">
             <div className="toolbar__body">
-              <ul className="toolbar__items">
-                <li className={brushList.includes(activeTool) ? "active more_figures" : undefined} onClick={() => pickBrushOrSwitchView()}>
-                  <button tabIndex={-1} title={renderMainToolTitle(lastActiveBrush)}>
-                    {allIcons[lastActiveBrush]}
-                  </button>
-                </li>
-                <li className={shapeList.includes(activeTool) ? "active more_figures" : undefined} onClick={() => pickFigureOrSwitchView()}>
-                  <button tabIndex={-1} title={renderMainToolTitle(lastActiveFigure)}>
-                    {allIcons[lastActiveFigure]}
-                  </button>
-                </li>
-                <li className={activeTool === "text" ? "active" : undefined} onClick={() => handleChangeTool("text")}>
-                  <button tabIndex={-1} title={renderMainToolTitle("text")}>
-                    <Icons.Text />
-                  </button>
-                </li>
-                <li className={activeTool === "highlighter" ? "active" : undefined} onClick={() => handleChangeTool("highlighter")}>
-                  <button tabIndex={-1} title={renderMainToolTitle("highlighter")}>
-                    <Icons.Highlighter />
-                  </button>
-                </li>
-                <li className={activeTool === "laser" ? "active" : undefined} onClick={() => handleChangeTool("laser")}>
-                  <button tabIndex={-1} title={renderMainToolTitle("laser")}>
-                    <Icons.Laser />
-                  </button>
-                </li>
-                <li className={activeTool === "eraser" ? "active" : undefined} onClick={() => handleChangeTool("eraser")}>
-                  <button tabIndex={-1} title={renderMainToolTitle("eraser")}>
-                    <Icons.Eraser />
-                  </button>
-                </li>
+              <ul
+                className="toolbar__items"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                {mainTools.map((item) => renderToolButton({
+                  ...item,
+                  itemKey: item.tool,
+                  title: renderMainToolTitle(item.tool),
+                }))}
                 <li className="cross-line"></li>
                 <li onClick={() => !isColorControlDisabled && setToolbarSlide("color-slide")}>
                   <button tabIndex={-1} className={`toolbar__color-picker ${colorList[activeColorIndex].name} color_tool_${activeTool}`} title={isColorControlDisabled ? "Color" : renderShortcutTitle("Color", "7")} />
@@ -345,52 +350,19 @@ const ToolBar = ({
             </div>
 
           <div className="side-view-body brush-group">
-            <ul className="toolbar__items">
-              <li className={activeTool === "pen" ? "active" : undefined} onClick={() => pickTool("pen")}>
-                <button tabIndex={-1} title={renderToolTitle("pen", "1")}>
-                  <Icons.Brush />
-                </button>
-              </li>
-              <li className={activeTool === "fadepen" ? "active" : undefined} onClick={() => pickTool("fadepen")}>
-                <button tabIndex={-1} title={renderToolTitle("fadepen", "2")}>
-                  <Icons.MagicBrush />
-                </button>
-              </li>
+            <ul className="toolbar__items" onPointerDown={(e) => e.stopPropagation()}>
+              {renderToolGroup(TOOL_GROUPS.brush)}
             </ul>
           </div>
 
           <div className="side-view-body tool-group">
-            <ul className="toolbar__items">
-              <li className={activeTool === "arrow" ? "active" : undefined} onClick={() => pickTool("arrow")}>
-                <button tabIndex={-1} title={renderToolTitle("arrow", "1")}>
-                  <Icons.Arrow />
-                </button>
-              </li>
-              <li className={activeTool === "flat_arrow" ? "active" : undefined} onClick={() => pickTool("flat_arrow")}>
-                <button tabIndex={-1} title={renderToolTitle("flat_arrow", "2")}>
-                  <Icons.FlatArrow />
-                </button>
-              </li>
-              <li className={activeTool === "rectangle" ? "active" : undefined} onClick={() => pickTool("rectangle")}>
-                <button tabIndex={-1} title={renderToolTitle("rectangle", "3")}>
-                  <Icons.Rectangle />
-                </button>
-              </li>
-              <li className={activeTool === "oval" ? "active" : undefined} onClick={() => pickTool("oval")}>
-                <button tabIndex={-1} title={renderToolTitle("oval", "4")}>
-                  <Icons.Oval />
-                </button>
-              </li>
-              <li className={activeTool === "line" ? "active" : undefined} onClick={() => pickTool("line")}>
-                <button tabIndex={-1} title={renderToolTitle("line", "5")}>
-                  <Icons.Line />
-                </button>
-              </li>
+            <ul className="toolbar__items" onPointerDown={(e) => e.stopPropagation()}>
+              {renderToolGroup(TOOL_GROUPS.shape)}
             </ul>
           </div>
 
           <div className="side-view-body color-group">
-            <ul className="toolbar__items">
+            <ul className="toolbar__items" onPointerDown={(e) => e.stopPropagation()}>
               {colorList.map((color, index) => (
                 <li
                   key={index}
@@ -404,7 +376,7 @@ const ToolBar = ({
           </div>
 
           <div className="side-view-body width-group">
-            <ul className="toolbar__items">
+            <ul className="toolbar__items" onPointerDown={(e) => e.stopPropagation()}>
               {widthList.map((width, index) => (
                 <li
                   key={index}
@@ -422,7 +394,7 @@ const ToolBar = ({
 
           <div className="toolbar__panel toolbar__panel--mini">
             <div className="toolbar__body">
-              <ul className="toolbar__items">
+              <ul className="toolbar__items" onPointerDown={(e) => e.stopPropagation()}>
                 <li className="active" onClick={handleToggleCollapsed}>
                   <button tabIndex={-1} title={renderMainToolTitle(activeTool)}>
                     {allIcons[activeTool]}
@@ -438,13 +410,17 @@ const ToolBar = ({
         </div>
       </div>
 
-      <div className="toolbar__slider" onClick={handleToggleCollapsed}>
+      <div
+        className="toolbar__slider"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={handleToggleCollapsed}
+      >
         {
           isCollapsed ? <Icons.AngleRight /> : <Icons.AngleLeft />
         }
       </div>
 
-      <div className="toolbar__close">
+      <div className="toolbar__close" onPointerDown={(e) => e.stopPropagation()}>
         <button tabIndex={-1} onClick={handleCloseToolBar}>
           <Icons.Close size={16} />
         </button>
