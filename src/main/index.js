@@ -1,8 +1,8 @@
 import { app, Tray, Menu, BrowserWindow, screen, globalShortcut, shell, ipcMain, nativeTheme, systemPreferences, desktopCapturer } from 'electron';
-import { updateElectronApp } from 'update-electron-app';
+// auto-updater removed in this fork; no-op in place of update-electron-app
 import Store from 'electron-store';
 import { randomUUID } from 'crypto';
-import { PostHog } from 'posthog-node'
+// posthog telemetry removed in this fork
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -607,8 +607,6 @@ app.on('second-instance', () => {
 app.commandLine.appendSwitch('disable-pinch');
 
 app.whenReady().then(() => {
-  launchTracker()
-
   hideDock()
 
   startAsHiddenCheck()
@@ -664,9 +662,7 @@ function hideDock() {
 }
 
 function updateApp() {
-  if (isLinux) return
-
-  updateElectronApp()
+  // no-op: auto-updater removed in this fork
 }
 
 ipcMain.handle('get_app_version', () => {
@@ -1539,36 +1535,7 @@ function safeSetLoginItemSettings(settings) {
 }
 
 function launchTracker() {
-  if (isDevelopment) { return }
-
-  try {
-    const key = process.env.PUBLIC_POSTHOG_KEY;
-
-    if (!key || key === 'undefined' || key === '') {
-      return;
-    }
-
-    const posthog = new PostHog(key, {
-      host: 'https://us.i.posthog.com',
-      flushAt: 1
-    })
-
-    posthog.capture({
-      distinctId: store.get('user_id') || 'anonymous',
-      event: 'app_launch',
-      properties: {
-        platform: 'app',
-
-        app_version: app.getVersion(),
-
-        os_platform: os.platform(),
-        os_release:  os.release(),
-        arch:        os.arch(),
-
-        config: store.store,
-      }
-    })
-  } catch (_) {}
+  // telemetry removed in this fork
 }
 
 function rawLog(message, ...args) {
