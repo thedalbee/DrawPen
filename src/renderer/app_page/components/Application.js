@@ -1591,6 +1591,7 @@ const Application = (settings) => {
         allEraserFigures={allEraserFigures}
         fadeOpacity={fadeOpacity}
         activeFigureInfo={activeFigureInfo}
+        isDrawing={isDrawing}
         cursorType={cursorType}
         handleMouseDown={handleMouseDown}
         handleMouseMove={handleMouseMove}

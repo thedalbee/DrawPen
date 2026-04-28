@@ -30,6 +30,7 @@ const DrawDesk = ({
   allEraserFigures,
   fadeOpacity,
   activeFigureInfo,
+  isDrawing,
   cursorType,
   handleMouseDown,
   handleMouseMove,
@@ -40,7 +41,8 @@ const DrawDesk = ({
   handleChangeTool,
 }) => {
 
-  const canvasRef = useRef(null);
+  const staticCanvasRef = useRef(null);
+  const activeCanvasRef = useRef(null);
   const offscreenCanvasRef = useRef(null);
 
   const prevToolRef = useRef(null);
@@ -49,109 +51,117 @@ const DrawDesk = ({
   const dpr = window.devicePixelRatio || 1;
 
   useEffect(() => {
-    // Main canvas layer setup
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const setupCanvas = (canvas) => {
+      const ctx = canvas.getContext('2d');
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      ctx.scale(dpr, dpr);
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+    };
 
-    canvas.width = Math.floor(window.innerWidth * dpr);
-    canvas.height = Math.floor(window.innerHeight * dpr);
+    setupCanvas(staticCanvasRef.current);
+    setupCanvas(activeCanvasRef.current);
 
-    ctx.scale(dpr, dpr);
-
-    canvas.style.width = `${window.innerWidth}px`;
-    canvas.style.height = `${window.innerHeight}px`;
-
-    // Offscreen canvas layer setup
     if (!offscreenCanvasRef.current) {
       offscreenCanvasRef.current = document.createElement('canvas');
     }
-
     const offscreenCanvas = offscreenCanvasRef.current;
     const offCtx = offscreenCanvas.getContext('2d');
-
-    offscreenCanvas.width = canvas.width;
-    offscreenCanvas.height = canvas.height;
-
+    offscreenCanvas.width = staticCanvasRef.current.width;
+    offscreenCanvas.height = staticCanvasRef.current.height;
     offCtx.scale(dpr, dpr);
   }, []);
 
+  const renderPersistentFigure = (ctx, figure, offscreenCanvas) => {
+    if (figure.type === 'pen') {
+      if (colorList[figure.colorIndex].name === 'color_rainbow') {
+        drawRainbowPen(ctx, offscreenCanvas, figure, updateRainbowColorDeg)
+      } else {
+        drawPen(ctx, figure)
+      }
+    }
+
+    if (figure.type === 'highlighter') {
+      if (colorList[figure.colorIndex].name === 'color_rainbow') {
+        drawRainbowHighlighter(ctx, offscreenCanvas, figure, updateRainbowColorDeg)
+      } else {
+        drawHighlighter(ctx, figure)
+      }
+    }
+
+    if (figure.type === 'arrow') {
+      drawArrow(ctx, figure, updateRainbowColorDeg)
+      if (activeFigureInfo && figure.id === activeFigureInfo.id) {
+        drawArrowActive(ctx, figure, activeFigureInfo.hoveredDotName)
+      }
+    }
+
+    if (figure.type === 'flat_arrow') {
+      drawFlatArrow(ctx, figure, updateRainbowColorDeg)
+      if (activeFigureInfo && figure.id === activeFigureInfo.id) {
+        drawFlatArrowActive(ctx, figure, activeFigureInfo.hoveredDotName)
+      }
+    }
+
+    if (figure.type === 'line') {
+      drawLine(ctx, figure, updateRainbowColorDeg)
+      if (activeFigureInfo && figure.id === activeFigureInfo.id) {
+        drawLineActive(ctx, figure, activeFigureInfo.hoveredDotName)
+      }
+    }
+
+    if (figure.type === 'rectangle') {
+      drawRectangle(ctx, figure, updateRainbowColorDeg)
+      if (activeFigureInfo && figure.id === activeFigureInfo.id) {
+        drawRectangleActive(ctx, figure, activeFigureInfo.hoveredDotName)
+      }
+    }
+
+    if (figure.type === 'oval') {
+      drawOval(ctx, figure, updateRainbowColorDeg)
+      if (activeFigureInfo && figure.id === activeFigureInfo.id) {
+        drawOvalActive(ctx, figure, activeFigureInfo.hoveredDotName)
+      }
+    }
+
+    if (figure.type === 'text') {
+      let isActive = false;
+      let dotName = null;
+      if (activeFigureInfo && figure.id === activeFigureInfo.id) {
+        isActive = true;
+        dotName = activeFigureInfo.hoveredDotName;
+      }
+      drawText(ctx, figure, updateRainbowColorDeg, isActive, dotName)
+    }
+  };
+
+  // Static layer: persistent figures (pen/shapes/text). Skipped while
+  // isDrawing=true so the in-progress stroke does not repaint N completed
+  // figures every pointermove.
   useEffect(() => {
-    draw(allFigures, allFadeFigures, allLaserFigures, allEraserFigures, activeFigureInfo, fadeOpacity, offscreenCanvasRef.current);
-  }, [allFigures, allFadeFigures, allLaserFigures, allEraserFigures, activeFigureInfo, fadeOpacity]);
+    if (isDrawing) return;
+    const canvas = staticCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const draw = (allFigures, allFadeFigures, allLaserFigures, allEraserFigures, activeFigureInfo, fadeOpacity, offscreenCanvas) => {
-    const ctx = canvasRef.current.getContext('2d');
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    const offscreenCanvas = offscreenCanvasRef.current;
+    allFigures.forEach((figure) => renderPersistentFigure(ctx, figure, offscreenCanvas));
+  }, [allFigures, isDrawing, activeFigureInfo]);
 
-    allFigures.forEach((figure) => {
-      if (figure.type === 'pen') {
-        if (colorList[figure.colorIndex].name === 'color_rainbow') {
-          drawRainbowPen(ctx, offscreenCanvas, figure, updateRainbowColorDeg)
-        } else {
-          drawPen(ctx, figure)
-        }
-      }
+  // Active layer: in-progress figure + transients (fade/laser/eraser).
+  // Repaints every coalesced flush during drawing.
+  useEffect(() => {
+    const canvas = activeCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (figure.type === 'highlighter') {
-        if (colorList[figure.colorIndex].name === 'color_rainbow') {
-          drawRainbowHighlighter(ctx, offscreenCanvas, figure, updateRainbowColorDeg)
-        } else {
-          drawHighlighter(ctx, figure)
-        }
-      }
+    const offscreenCanvas = offscreenCanvasRef.current;
 
-      if (figure.type === 'arrow') {
-        drawArrow(ctx, figure, updateRainbowColorDeg)
-
-        if (activeFigureInfo && figure.id === activeFigureInfo.id) {
-          drawArrowActive(ctx, figure, activeFigureInfo.hoveredDotName)
-        }
-      }
-
-      if (figure.type === 'flat_arrow') {
-        drawFlatArrow(ctx, figure, updateRainbowColorDeg)
-
-        if (activeFigureInfo && figure.id === activeFigureInfo.id) {
-          drawFlatArrowActive(ctx, figure, activeFigureInfo.hoveredDotName)
-        }
-      }
-
-      if (figure.type === 'line') {
-        drawLine(ctx, figure, updateRainbowColorDeg)
-
-        if (activeFigureInfo && figure.id === activeFigureInfo.id) {
-          drawLineActive(ctx, figure, activeFigureInfo.hoveredDotName)
-        }
-      }
-
-      if (figure.type === 'rectangle') {
-        drawRectangle(ctx, figure, updateRainbowColorDeg)
-
-        if (activeFigureInfo && figure.id === activeFigureInfo.id) {
-          drawRectangleActive(ctx, figure, activeFigureInfo.hoveredDotName)
-        }
-      }
-
-      if (figure.type === 'oval') {
-        drawOval(ctx, figure, updateRainbowColorDeg)
-
-        if (activeFigureInfo && figure.id === activeFigureInfo.id) {
-          drawOvalActive(ctx, figure, activeFigureInfo.hoveredDotName)
-        }
-      }
-
-      if (figure.type === 'text') {
-        let isActive = false;
-        let dotName = null;
-
-        if (activeFigureInfo && figure.id === activeFigureInfo.id) {
-          isActive = true;
-          dotName = activeFigureInfo.hoveredDotName;
-        }
-
-        drawText(ctx, figure, updateRainbowColorDeg, isActive, dotName)
-      }
-    })
+    if (isDrawing && allFigures.length > 0) {
+      const last = allFigures[allFigures.length - 1];
+      renderPersistentFigure(ctx, last, offscreenCanvas);
+    }
 
     allFadeFigures.forEach((figure) => {
       if (figure.type === 'fadepen') {
@@ -163,14 +173,9 @@ const DrawDesk = ({
       }
     })
 
-    allLaserFigures.forEach((figure) => {
-      drawLaser(ctx, figure)
-    })
-
-    allEraserFigures.forEach((figure) => {
-      drawEraserTail(ctx, figure)
-    })
-  };
+    allLaserFigures.forEach((figure) => drawLaser(ctx, figure))
+    allEraserFigures.forEach((figure) => drawEraserTail(ctx, figure))
+  }, [allFigures, allFadeFigures, allLaserFigures, allEraserFigures, isDrawing, fadeOpacity, activeFigureInfo]);
 
   const isTemporaryEraser = (event) => {
     const contactLength = Math.max(event.width, event.height);
@@ -183,12 +188,11 @@ const DrawDesk = ({
   }
 
   const onPointerDown = (event) => {
-    event.preventDefault(); // NOTE: Required for Text figure
+    event.preventDefault();
 
     if(event.pointerType === 'mouse' && event.button === 2) return;
 
     if (isTemporaryEraser(event) && activeTool !== 'eraser') {
-      // Hard Trick! Rethink!
       prevToolRef.current = activeTool;
       simulateKeyDown.current = true;
 
@@ -242,16 +246,22 @@ const DrawDesk = ({
   }
 
   return (
-    <canvas
-      id="canvas"
-      ref={canvasRef}
-      style={{ cursor: cursorType }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onDoubleClick={onDoubleClick}
-    />
+    <>
+      <canvas
+        id="canvas-static"
+        ref={staticCanvasRef}
+      />
+      <canvas
+        id="canvas-active"
+        ref={activeCanvasRef}
+        style={{ cursor: cursorType }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={onDoubleClick}
+      />
+    </>
   );
 };
 
