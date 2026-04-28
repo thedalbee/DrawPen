@@ -155,8 +155,12 @@ const Application = (settings) => {
   const lastEscapeAtRef = useRef(0);
 
   const handleKeyDown = useCallback((event) => {
-    const eventKey = (event.key || '').toLowerCase();
+    const rawKey = (event.key || '').toLowerCase();
     const eventCode = (event.code || '').toLowerCase();
+    // Use the physical key position (KeyV -> 'v') so Korean / Japanese / Chinese
+    // IMEs still match letter shortcuts. Fall back to event.key for non-letter keys
+    // (shift / arrow* / enter / escape / etc).
+    const eventKey = eventCode.startsWith('key') ? eventCode.slice(3) : rawKey;
     const ctrlOrMeta = event.ctrlKey || event.metaKey;
     const shiftKey = event.shiftKey;
     const eventRepeat = event.repeat;
