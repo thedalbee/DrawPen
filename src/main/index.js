@@ -1121,6 +1121,11 @@ function enablePointerMode() {
 function hideApp() {
   rawLog('Hiding app...')
 
+  // Clear all drawings on hide so reopening starts blank.
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('reset_screen')
+  }
+
   hideWindow(mainWindow)
   hideWindow(extendedToolbarWindow)
 
