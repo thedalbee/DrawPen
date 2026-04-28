@@ -980,6 +980,43 @@ const Application = (settings) => {
     setFadeFigures(eraseOnIntersection(eraserFigure));
   }
 
+  // rAF-coalesce setState calls during drawing. Pointermove on Chromium can
+  // fire 200+ times/sec; this caps state-driven repaints to display refresh.
+  // The underlying figure points are mutated synchronously, so the next paint
+  // shows the latest geometry — we only delay the React re-render notification.
+  const drawFlushRef = useRef({ scheduled: false, kinds: new Set(), rafId: 0 });
+
+  const scheduleDrawFlush = useCallback((kind) => {
+    drawFlushRef.current.kinds.add(kind);
+    if (drawFlushRef.current.scheduled) return;
+    drawFlushRef.current.scheduled = true;
+    drawFlushRef.current.rafId = requestAnimationFrame(() => {
+      drawFlushRef.current.scheduled = false;
+      const kinds = drawFlushRef.current.kinds;
+      drawFlushRef.current.kinds = new Set();
+      if (kinds.has('figures')) setAllFigures(prev => [...prev]);
+      if (kinds.has('fade')) setFadeFigures(prev => [...prev]);
+      if (kinds.has('laser')) setLaserFigure(prev => [...prev]);
+      if (kinds.has('eraser')) setEraserFigure(prev => [...prev]);
+    });
+  }, []);
+
+  const flushDrawNow = useCallback(() => {
+    if (!drawFlushRef.current.scheduled) return;
+    cancelAnimationFrame(drawFlushRef.current.rafId);
+    drawFlushRef.current.scheduled = false;
+    const kinds = drawFlushRef.current.kinds;
+    drawFlushRef.current.kinds = new Set();
+    if (kinds.has('figures')) setAllFigures(prev => [...prev]);
+    if (kinds.has('fade')) setFadeFigures(prev => [...prev]);
+    if (kinds.has('laser')) setLaserFigure(prev => [...prev]);
+    if (kinds.has('eraser')) setEraserFigure(prev => [...prev]);
+  }, []);
+
+  useEffect(() => () => {
+    if (drawFlushRef.current.rafId) cancelAnimationFrame(drawFlushRef.current.rafId);
+  }, []);
+
   const handleMouseDown = ({ x, y }) => {
     // Diactivate text editor
     if (textEditorContainer) {
@@ -1124,7 +1161,7 @@ const Application = (settings) => {
       }
 
       setActiveFigureInfo(prev => ({ ...prev, x, y }));
-      setAllFigures([...allFigures]);
+      scheduleDrawFlush('figures');
       return
     }
 
@@ -1134,7 +1171,7 @@ const Application = (settings) => {
 
         currentLaser.points = [...currentLaser.points, [x, y]];
 
-        setLaserFigure([...allLaserFigures]);
+        scheduleDrawFlush('laser');
         scheduleClearLaserTail(currentLaser.id)
         return;
       }
@@ -1145,7 +1182,7 @@ const Application = (settings) => {
         currentEraser.points = [...currentEraser.points, [x, y]];
 
         eraseFiguresOnIntersection(currentEraser);
-        setEraserFigure([...allEraserFigures]);
+        scheduleDrawFlush('eraser');
         scheduleClearEraserTail(currentEraser.id)
         return;
       }
@@ -1155,7 +1192,7 @@ const Application = (settings) => {
 
         currentFigure.points = [...currentFigure.points, [x, y]];
 
-        setFadeFigures([...allFadeFigures]);
+        scheduleDrawFlush('fade');
         return;
       }
 
@@ -1164,7 +1201,7 @@ const Application = (settings) => {
 
         currentFigure.points = [...currentFigure.points, [x, y]];
 
-        setAllFigures([...allFigures]);
+        scheduleDrawFlush('figures');
         return
       }
 
@@ -1191,7 +1228,7 @@ const Application = (settings) => {
 
         currentFigure.points[1] = [x, y];
 
-        setAllFigures([...allFigures]);
+        scheduleDrawFlush('figures');
         return
       }
     }
@@ -1200,6 +1237,10 @@ const Application = (settings) => {
   };
 
   const handleMouseUp = ({ x, y }) => {
+    // Commit any pending rAF-coalesced state before terminal stroke logic runs
+    // so undo/clear/etc. see the final point list.
+    flushDrawNow();
+
     if (isDrawing) {
       const upPoint = [x, y];
 
