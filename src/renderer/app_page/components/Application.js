@@ -1,6 +1,6 @@
 import './Application.scss';
 
-import React, { useCallback, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { throttle, debounce } from 'lodash';
 import DrawDesk from './components/DrawDesk.js';
 import ToolBar from './components/ToolBar.js';
@@ -107,7 +107,12 @@ const Application = (settings) => {
   }
 
   const [rainbowColorDeg, updateRainbowColorDeg] = useState(initialColorDeg);
-  const [mouseCoordinates, setMouseCoordinates] = useState({ x: 0, y: 0 });
+  // Mouse position is held in a ref (read by paste handler) and pushed to the
+  // CuteCursor DOM via transform. Keeping this out of React state stops every
+  // pointermove from re-rendering the whole Application tree and from rebuilding
+  // handleKeyDown's listener (which used to depend on mouseCoordinates).
+  const mouseCoordinatesRef = useRef({ x: 0, y: 0 });
+  const cuteCursorRef = useRef(null);
   const [allFigures, setAllFigures] = useState(initialFigures);
   const [allLaserFigures, setLaserFigure] = useState([]);
   const [allEraserFigures, setEraserFigure] = useState([]);
@@ -219,7 +224,7 @@ const Application = (settings) => {
             if (now - lastPasteAtRef.current < pastCooldownMs) return;
             lastPasteAtRef.current = now;
 
-            const { x, y } = mouseCoordinates;
+            const { x, y } = mouseCoordinatesRef.current;
 
             const newFigure = {
               ...clipboardFigure,
@@ -561,7 +566,7 @@ const Application = (settings) => {
         }
         break;
     }
-  }, [allFigures, undoStackFigures, redoStackFigures, clipboardFigure, isDrawing, activeFigureInfo, activeTool, activeColorIndex, activeWidthIndex, toolbarLastActiveBrush, toolbarLastActiveFigure, toolbarSlide, textEditorContainer, mouseCoordinates, mainColorIndex, secondaryColorIndex]);
+  }, [allFigures, undoStackFigures, redoStackFigures, clipboardFigure, isDrawing, activeFigureInfo, activeTool, activeColorIndex, activeWidthIndex, toolbarLastActiveBrush, toolbarLastActiveFigure, toolbarSlide, textEditorContainer, mainColorIndex, secondaryColorIndex]);
 
   const handleKeyUp = useCallback((event) => {
     const eventKey = (event.key || '').toLowerCase();
@@ -948,7 +953,13 @@ const Application = (settings) => {
 
     setCursorType('crosshair');
   };
-  const setMouseCursorThrottle = throttle(setMouseCursor, 100);
+  // Wrap once with useMemo so throttling state actually persists across renders.
+  // The previous direct call recreated a new throttled function every render,
+  // which defeated the throttle entirely.
+  const setMouseCursorThrottle = useMemo(
+    () => throttle(setMouseCursor, 100),
+    [activeFigureInfo, activeTool, activeColorIndex, activeWidthIndex]
+  );
 
   const eraseOnIntersection = (eraserFigure) => (prevFigures) => {
     let hasChanges = false;
@@ -1307,7 +1318,13 @@ const Application = (settings) => {
   };
 
   const handleMousePosition = (event) => {
-    setMouseCoordinates(getMouseCoordinates(event));
+    const coords = getMouseCoordinates(event);
+    mouseCoordinatesRef.current = coords;
+    // Drive the CuteCursor's transform imperatively to bypass React reconciliation.
+    if (cuteCursorRef.current) {
+      cuteCursorRef.current.style.transform =
+        `translate3d(${coords.x + 15}px, ${coords.y - 25}px, 0)`;
+    }
   }
 
   const handleContextMenu = (_event) => {
@@ -1518,7 +1535,7 @@ const Application = (settings) => {
       {
         showCuteCursor &&
           <CuteCursor
-            mouseCoordinates={mouseCoordinates}
+            ref={cuteCursorRef}
             activeColorIndex={activeColorIndex}
             activeWidthIndex={activeWidthIndex}
             activeTool={activeTool}

@@ -360,6 +360,11 @@ function createMainWindow() {
       devTools: hasDevTools,
       nodeIntegration: false,
       preload: APP_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      // Don't throttle paint when the overlay loses focus — the user often draws
+      // while another app is active (acceptFirstMouse routes the click through),
+      // and backgroundThrottling=true (default) would drop the stroke frame rate
+      // to ~1 Hz in that case.
+      backgroundThrottling: false,
     }
   })
 
