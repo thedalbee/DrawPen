@@ -49,19 +49,23 @@ const DrawDesk = ({
   const simulateKeyDown = useRef(false);
 
   const dpr = window.devicePixelRatio || 1;
+  // Active layer hosts only the in-progress stroke + transients; on mouseUp
+  // the stroke commits to the static (full-DPR) layer. Rendering it at 1x
+  // cuts pixel work ~4x on retina with only a slight blur during drag.
+  const activeDpr = 1;
 
   useEffect(() => {
-    const setupCanvas = (canvas) => {
+    const setupCanvas = (canvas, scale) => {
       const ctx = canvas.getContext('2d');
-      canvas.width = Math.floor(window.innerWidth * dpr);
-      canvas.height = Math.floor(window.innerHeight * dpr);
-      ctx.scale(dpr, dpr);
+      canvas.width = Math.floor(window.innerWidth * scale);
+      canvas.height = Math.floor(window.innerHeight * scale);
+      ctx.scale(scale, scale);
       canvas.style.width = `${window.innerWidth}px`;
       canvas.style.height = `${window.innerHeight}px`;
     };
 
-    setupCanvas(staticCanvasRef.current);
-    setupCanvas(activeCanvasRef.current);
+    setupCanvas(staticCanvasRef.current, dpr);
+    setupCanvas(activeCanvasRef.current, activeDpr);
 
     if (!offscreenCanvasRef.current) {
       offscreenCanvasRef.current = document.createElement('canvas');

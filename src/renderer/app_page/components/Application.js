@@ -1166,10 +1166,22 @@ const Application = (settings) => {
     }
 
     if (isDrawing) {
+      // Skip points within 1px of the previous one — perfect-freehand and
+      // canvas stroking both scale linearly with point count, and trackpad
+      // micro-jitter at 120Hz produces many near-duplicates.
+      const isDuplicate = (points) => {
+        if (points.length === 0) return false;
+        const [px, py] = points[points.length - 1];
+        const dx = x - px, dy = y - py;
+        return dx * dx + dy * dy < 1;
+      };
+
       if (activeTool === 'laser') {
         const currentLaser = allLaserFigures[allLaserFigures.length - 1];
 
-        currentLaser.points = [...currentLaser.points, [x, y]];
+        if (!isDuplicate(currentLaser.points)) {
+          currentLaser.points = [...currentLaser.points, [x, y]];
+        }
 
         scheduleDrawFlush('laser');
         scheduleClearLaserTail(currentLaser.id)
@@ -1179,7 +1191,9 @@ const Application = (settings) => {
       if (activeTool === 'eraser') {
         const currentEraser = allEraserFigures[allEraserFigures.length - 1];
 
-        currentEraser.points = [...currentEraser.points, [x, y]];
+        if (!isDuplicate(currentEraser.points)) {
+          currentEraser.points = [...currentEraser.points, [x, y]];
+        }
 
         eraseFiguresOnIntersection(currentEraser);
         scheduleDrawFlush('eraser');
@@ -1190,7 +1204,9 @@ const Application = (settings) => {
       if (activeTool === 'fadepen') {
         const currentFigure = allFadeFigures[allFadeFigures.length - 1];
 
-        currentFigure.points = [...currentFigure.points, [x, y]];
+        if (!isDuplicate(currentFigure.points)) {
+          currentFigure.points = [...currentFigure.points, [x, y]];
+        }
 
         scheduleDrawFlush('fade');
         return;
@@ -1199,7 +1215,9 @@ const Application = (settings) => {
       if (['pen', 'highlighter'].includes(activeTool)) {
         const currentFigure = allFigures[allFigures.length - 1];
 
-        currentFigure.points = [...currentFigure.points, [x, y]];
+        if (!isDuplicate(currentFigure.points)) {
+          currentFigure.points = [...currentFigure.points, [x, y]];
+        }
 
         scheduleDrawFlush('figures');
         return
