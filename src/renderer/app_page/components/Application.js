@@ -273,6 +273,12 @@ const Application = (settings) => {
         }
         break;
       }
+      case 'd': {
+        if (!ctrlOrMeta) {
+          handleChangeTool('line');
+        }
+        break;
+      }
       case 'z': {
         if (ctrlOrMeta) {
           if (activeFigureInfo) {
