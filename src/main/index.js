@@ -1112,6 +1112,11 @@ function enableDrawModeFromExtendedToolbar(screenX, screenY) {
 function enablePointerMode() {
   rawLog('Enable pointer mode...')
 
+  // Clear drawings on leaving draw mode so the next open is blank.
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('reset_screen')
+  }
+
   showExtendedToolbarWindow()
   hideWindow(mainWindow)
 
