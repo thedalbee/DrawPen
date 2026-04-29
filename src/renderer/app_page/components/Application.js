@@ -261,15 +261,16 @@ const Application = (settings) => {
             });
           }
         } else {
-          // Plain c -> shapes (cycles through shapeList)
-          let nextShape = toolbarLastActiveFigure;
-          if (activeTool === toolbarLastActiveFigure) {
-            const i = shapeList.indexOf(activeTool);
-            nextShape = shapeList[(i + direction + shapeList.length) % shapeList.length];
-          }
-          handleChangeTool(nextShape);
+          // Plain c -> oval (circle)
+          handleChangeTool('oval');
         }
 
+        break;
+      }
+      case 's': {
+        if (!ctrlOrMeta) {
+          handleChangeTool('rectangle');
+        }
         break;
       }
       case 'z': {
